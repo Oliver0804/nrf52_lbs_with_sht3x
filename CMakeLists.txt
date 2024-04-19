@@ -13,6 +13,19 @@ target_sources(app PRIVATE
   src/main.c
 )
 
+# Add PID_v1.h and pid.cpp
+#target_sources(app PRIVATE
+#  src/*.cpp
+#)
+#啟用cpp
+#target_compile_features(app PRIVATE cxx_std_11)
+#set_property(TARGET app PROPERTY CXX_STANDARD 11)
+#set_property(TARGET app PROPERTY CXX_STANDARD_REQUIRED ON)
+#target_include_directories(app PRIVATE include)
+
+#target_include_directories(app PRIVATE
+#  ${CMAKE_CURRENT_SOURCE_DIR}/src
+
 # Preinitialization related to Thingy:53 DFU
 target_sources_ifdef(CONFIG_BOARD_THINGY53_NRF5340_CPUAPP app PRIVATE
   boards/thingy53.c

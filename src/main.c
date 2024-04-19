@@ -18,6 +18,7 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/sensor.h>
 struct sensor_value temp, press, humidity;
+#define SHT31_I2C_ADDRESS 0x44 // SHT31 的 I2C 地址
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
@@ -192,8 +193,10 @@ static int init_button(void)
 
 void main(void)
 {
+	int16_t temperature, humidity;
+	uint8_t read_buf[6]; // 根据传感器的数据格式调整大小
 	static const struct device *twi_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
-	const struct device *const dev = DEVICE_DT_GET_ONE(sensirion_sht3xd);
+	// const struct device *const dev = DEVICE_DT_GET_ONE(sensirion_sht3xd);
 	int rc;
 	if (!device_is_ready(twi_dev))
 	{
@@ -203,14 +206,7 @@ void main(void)
 	{
 		printk("twi_dev is ready\n");
 	}
-	if (!device_is_ready(dev))
-	{
-		printk("error. dev is not ready\n");
-	}
-	else
-	{
-		printk("dev is ready\n");
-	}
+
 	int blink_status = 0;
 	int err;
 
@@ -281,27 +277,36 @@ void main(void)
 	for (;;)
 	{
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
-		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL / 5)); // you can try changing this value
-		rc = sensor_sample_fetch(dev);
-		if (rc)
+		// k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL)); // you can try changing this value
+		//  rc = sensor_sample_fetch(twi_dev);
+		uint8_t cmd[] = {0x24, 0x00}; // 高重复性，时钟拉低
+		uint8_t rx_buf[6];			  // 接收缓冲区
+
+		// 发送测量命令
+		if (i2c_write(twi_dev, cmd, sizeof(cmd), SHT31_I2C_ADDRESS) != 0)
 		{
-			printk("Failed to fetch data from SHT3X sensor: %d\n", rc);
-			// return;
+			printk("Failed to write measurement command\n");
+			return;
 		}
-		rc = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
-		if (rc)
+
+		// 等待测量完成
+		k_sleep(K_MSEC(20)); // 等待足够的测量时间
+
+		// 读取测量结果
+		if (i2c_read(twi_dev, rx_buf, sizeof(rx_buf), SHT31_I2C_ADDRESS) != 0)
 		{
-			printk("Failed to fetch temperature data from SHT3X sensor: %d\n", rc);
-			// return;
+			printk("Failed to read data\n");
+			return;
 		}
-		rc = sensor_channel_get(dev, SENSOR_CHAN_HUMIDITY, &humidity);
-		if (rc)
-		{
-			printk("Failed to fetch humidity data from SHT3X sensor: %d\n", rc);
-			// return;
-		}
-		printk("Temperature: %d.%06d C\n", temp.val1, temp.val2);
-		printk("Humidity: %d.%06d %%RH\n", humidity.val1, humidity.val2);
-		// k_msleep(delay_time);
+
+		// 计算并显示温度和湿度
+		int temp = (rx_buf[0] << 8) | rx_buf[1];
+		int humidity = (rx_buf[3] << 8) | rx_buf[4];
+
+		printk("Temperature: %.2f C\n", -45 + (175 * temp / 65535.0));
+		printk("Humidity: %.2f %%RH\n", 100 * humidity / 65535.0);
+		// printk("Temperature: %d.%06d C\n", temp.val1, temp.val2);
+		// printk("Humidity: %d.%06d %%RH\n", humidity.val1, humidity.val2);
+		//  k_msleep(delay_time);
 	}
 }
